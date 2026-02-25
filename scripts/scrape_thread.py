@@ -4,16 +4,25 @@ import time
 import os
 from collections import deque
 
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    "Accept": "application/json, text/plain, */*",
+session = requests.Session()
+session.headers.update({
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.7499.192 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
     "Accept-Language": "en-US,en;q=0.9",
-}
+    "Accept-Encoding": "gzip, deflate, br",
+    "Connection": "keep-alive",
+    "Upgrade-Insecure-Requests": "1",
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "none",
+    "Sec-Fetch-User": "?1",
+    "Cache-Control": "max-age=0",
+})
 
 def safe_get(url, params=None, retries=6):
     for attempt in range(retries):
         try:
-            resp = requests.get(url, headers=HEADERS, params=params, timeout=15)
+            resp = session.get(url, params=params, timeout=15)
             if resp.status_code == 200 and resp.text.strip():
                 return resp.json()
             elif resp.status_code in (429, 403):
@@ -66,14 +75,10 @@ def fetch_morechildren(chunk, link_fullname):
     return []
 
 def scrape_thread(post_id, label):
-    """
-    Scrape a Reddit thread by post ID with checkpointing.
-    label: short name for output files e.g. 'bills_broncos_p1'
-    """
     checkpoint_file = f"checkpoint_{label}.csv"
     base_url = f"https://www.reddit.com/comments/{post_id}.json"
 
-    # ── Load checkpoint if exists ──────────────────────────────────────
+    # Load checkpoint if exists
     all_comments = []
     seen_ids = set()
     if os.path.exists(checkpoint_file):
@@ -84,7 +89,7 @@ def scrape_thread(post_id, label):
     else:
         print(f"[{label}] No checkpoint found, starting fresh")
 
-    # ── Initial fetch ──────────────────────────────────────────────────
+    # Initial fetch
     print(f"[{label}] Fetching initial comment tree...")
     time.sleep(2)
     data = safe_get(base_url, params={"limit": 500, "depth": 10})
@@ -100,7 +105,7 @@ def scrape_thread(post_id, label):
     parse_comment_tree(data[1]["data"]["children"], all_comments, more_queue, seen_ids)
     print(f"[{label}] Initial pass: {len(all_comments)} comments, {len(more_queue)} batches queued")
 
-    # ── Expand ────────────────────────────────────────────────────────
+    # Expand
     batch_count = 0
     while more_queue:
         batch = more_queue.popleft()
@@ -113,19 +118,17 @@ def scrape_thread(post_id, label):
             if batch_count % 10 == 0:
                 print(f"  [{label}] {batch_count} batches | {len(all_comments)} comments")
 
-            # Save checkpoint every 50 batches
             if batch_count % 50 == 0:
                 pd.DataFrame(all_comments).to_csv(checkpoint_file, index=False)
                 print(f"  [{label}] >>> Checkpoint saved ({len(all_comments)} comments)")
 
             time.sleep(2)
 
-    # ── Final save ────────────────────────────────────────────────────
+    # Final save
     df = pd.DataFrame(all_comments).drop_duplicates(subset="comment_id")
     df.to_csv(f"raw_{label}.csv", index=False)
     print(f"[{label}] Done! {len(df)} total comments saved to raw_{label}.csv")
 
-    # Clean up checkpoint now that we're done
     if os.path.exists(checkpoint_file):
         os.remove(checkpoint_file)
         print(f"[{label}] Checkpoint file removed")
@@ -133,13 +136,12 @@ def scrape_thread(post_id, label):
     return df
 
 
-# ── Run all four threads sequentially ─────────────────────────────────
-# Comment out any you've already done
+# Run all four threads sequentially
 threads = [
-    ("1qfrol6", "bills_broncos_p2"),   # Bills/Broncos 2nd half (your original)
-    ("1qfnyfb", "bills_broncos_p1"),   # Bills/Broncos 1st half
-    ("1nt2qh6", "packers_cowboys"),    # Packers/Cowboys
-    ("1p931uu", "bears_eagles"),       # Bears/Eagles
+    ("1qfrol6", "bills_broncos_p2"),
+    ("1qfnyfb", "bills_broncos_p1"),
+    ("1nt2qh6", "packers_cowboys"),
+    ("1p931uu", "bears_eagles"),
 ]
 
 for post_id, label in threads:
@@ -147,7 +149,7 @@ for post_id, label in threads:
     print(f"Starting: {label}")
     print(f"{'='*60}")
     scrape_thread(post_id, label)
-    print(f"\nSleeping 15 minutes before next thread to avoid IP block...")
-    time.sleep(1200)
+    print(f"\nSleeping before next thread to avoid IP block...")
+    time.sleep(900)
 
 print("\nAll threads scraped!")

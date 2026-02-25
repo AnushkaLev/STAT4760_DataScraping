@@ -1,7 +1,7 @@
 import pandas as pd
 import os
 
-# ── Load all four raw files ────────────────────────────────────────────
+# Load all four raw files
 def load(label):
     path = f"raw_{label}.csv"
     if not os.path.exists(path):
@@ -16,7 +16,7 @@ p2 = load("bills_broncos_p2")
 packers = load("packers_cowboys")
 bears = load("bears_eagles")
 
-# ── Combine Bills/Broncos threads ──────────────────────────────────────
+# Combine Bills/Broncos threads
 if p1 is not None and p2 is not None:
     bills_raw = pd.concat([p1, p2]).drop_duplicates(subset="comment_id")
 elif p2 is not None:
@@ -25,7 +25,7 @@ elif p2 is not None:
 else:
     bills_raw = None
 
-# ── User-level aggregation function ───────────────────────────────────
+# User-level aggregation function
 def make_user_counts(df, game_label):
     df_clean = df[df["author"].notna() & (df["author"] != "[deleted]")].copy()
     user_counts = (
@@ -43,7 +43,7 @@ def make_user_counts(df, game_label):
     user_counts["game"] = game_label
     return user_counts
 
-# ── Build user-level datasets ──────────────────────────────────────────
+# Build user-level datasets
 datasets = {}
 
 if bills_raw is not None:
@@ -55,7 +55,7 @@ if packers is not None:
 if bears is not None:
     datasets["bears_eagles"] = make_user_counts(bears, "Bears vs Eagles")
 
-# ── Save individual user-count files ──────────────────────────────────
+# Save individual user-count files
 for name, df in datasets.items():
     df.to_csv(f"users_{name}.csv", index=False)
     print(f"\n{'='*50}")
@@ -66,13 +66,13 @@ for name, df in datasets.items():
     print(f"  Max comments:    {df['comment_count'].max()}")
     print(df[["author","comment_count","avg_score"]].head(10).to_string())
 
-# ── Save combined file for cross-game analysis ─────────────────────────
+# Save combined file for cross-game analysis
 if datasets:
     combined = pd.concat(datasets.values())
     combined.to_csv("users_all_games.csv", index=False)
     print(f"\nCombined file saved: users_all_games.csv ({len(combined)} total users across all games)")
 
-# ── NBD-ready histogram per game ───────────────────────────────────────
+# NBD-ready histogram per game
 print("\n\nHistogram summary (for NBD fitting):")
 for name, df in datasets.items():
     print(f"\n{name}:")
